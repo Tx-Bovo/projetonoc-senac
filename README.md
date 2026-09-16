@@ -338,7 +338,7 @@ Plugins de datasource carregados incluem Zabbix (`alexanderzobnin-zabbix-app`), 
 ### Execução real
 Foi criado no Zabbix o usuário `grafana_ro` (Name: "Grafana Connector"), destinado à integração com o Grafana.
  
-![Usuário grafana_ro no Zabbix](imagens/fase11-api-zabbix.png)
+![Usuário grafana_ro no Zabbix](images/fase11-api-zabbix.png)
  
 | Campo | Valor |
 |---|---|
