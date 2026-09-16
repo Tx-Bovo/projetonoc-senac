@@ -2,7 +2,6 @@
 
 ![Dashboard NOC no Grafana](images/fase13-dashboard.png)
 
-
 > **Investigação, Monitoramento e Observabilidade de Redes**
 > Ubuntu Server + Redes + Wireshark + Zabbix + Grafana
 
@@ -203,8 +202,8 @@ O log de instalação do Apache e o log de acesso SSH (`sshd: Accepted password 
 
 ## Fase 06 — Diagnóstico manual e Wireshark
 
-### Execução real
-Captura inicial ampla (`fase6_capture.pcap`, 169.385 frames) analisada com `tshark -z io,phs`, seguida de uma captura filtrada dedicada (`fase6-extra.pcap`) para completar os protocolos que não apareceram na primeira.
+### Execução real (VMs — via tshark)
+Captura inicial ampla (`fase6_capture.pcap`, 169.385 frames) analisada com `tshark -z io,phs`, seguida de uma captura filtrada dedicada (`fase6-extra.pcap`) para completar os protocolos que não apareceram na primeira. Ambas rodadas diretamente no `srv-zabbix-thiago`.
 
 **Estatística geral (captura ampla):**
 ```
@@ -238,14 +237,32 @@ SYN-ACK:  10.110.102.108:10050 → 10.110.102.121:42286
 ```
 
 **TLS/HTTPS** ⚠️ (evidência de aplicação, não de pacote bruto)
-O filtro `tls.handshake` não retornou pacotes na captura, mas a conexão TLS foi confirmada via `curl -v https://www.google.com`:
+O filtro `tls.handshake` não retornou pacotes na captura da VM, mas a conexão TLS foi confirmada via `curl -v https://www.google.com`:
 - TLS 1.3 negociado com `www.google.com` (142.251.152.119:443)
 - Cifra: `TLS_AES_256_GCM_SHA384`
 - Certificado validado (emissor: Google Trust Services, `SSL certificate verify ok`)
 - ALPN negociou HTTP/2
 
+### Execução real (PC local — Wireshark, interface gráfica)
+Para complementar a análise em modo texto (tshark) com a interface gráfica do Wireshark, a mesma captura de protocolos foi refeita localmente, direto no computador do autor, usando a interface de rede do próprio PC. Tráfego gerado manualmente por protocolo (ARP via `arp -d` + ping ao gateway local, ICMP via `ping`, DNS via `nslookup`, e TCP/TLS via acesso HTTPS no navegador).
+
+**ARP**
+![Captura ARP no Wireshark](images/fase06-arp.png)
+
+**ICMP**
+![Captura ICMP no Wireshark](images/fase06-icmp.png)
+
+**DNS**
+![Captura DNS no Wireshark](images/fase06-dns.png)
+
+**TCP Three-way handshake**
+![Captura do handshake TCP no Wireshark](images/fase06-tcp-handshake.png)
+
+**TLS Handshake**
+![Captura do handshake TLS no Wireshark](images/fase06-tls.png)
+
 ### Checkpoint
-✅ ICMP, ARP, DNS e TCP (handshake) capturados via tshark. ⚠️ TLS confirmado por evidência de aplicação (curl -v), não por pacote de handshake bruto — registrar essa limitação.
+✅ ICMP, ARP, DNS e TCP (handshake) capturados tanto via `tshark` (nas VMs) quanto via Wireshark (interface gráfica, no PC local). ✅ TLS handshake capturado com sucesso na captura local (resolvendo a limitação encontrada na captura da VM).
 
 ### Evidências
 ```
@@ -256,7 +273,7 @@ $ tshark -r fase6-extra.pcap -Y "icmp"        → 4 pares request/reply (ping ge
 $ tshark -r fase6-extra.pcap -Y "dns"         → consulta e resposta A para google.com via 8.8.8.8
 $ curl -v https://www.google.com              → handshake TLS 1.3 completo em nível de aplicação
 ```
-Todos os filtros e capturas foram executados diretamente no `srv-zabbix-thiago`, com saída colada integralmente acima — cobrindo os cinco protocolos exigidos pelo checkpoint (ICMP, ARP, DNS, TCP e TLS/HTTPS), com a ressalva já registrada sobre o TLS.
+Essas saídas de terminal (coletadas nas VMs) e os cinco prints do Wireshark acima (coletados no PC local, com filtros de exibição `arp`, `icmp`, `dns`, `tcp.flags.syn==1` e `tls.handshake.type==1 or tls.handshake.type==2`) juntos cobrem de forma redundante e completa os cinco protocolos exigidos pelo checkpoint (ICMP, ARP, DNS, TCP e TLS/HTTPS).
 
 ---
 
@@ -311,10 +328,10 @@ Além disso, a própria captura de pacotes da Fase 06 comprova a comunicação r
 ## Fase 09 — Monitoramento no Zabbix
 
 ### Execução real
-Os itens de monitoramento estão sendo coletados corretamente — confirmado através do dashboard Grafana (Fase 13), que consome os dados diretamente do datasource Zabbix: uptime, CPU, memória, disco, rede e ausência de problemas ativos.
+Os itens de monitoramento estão sendo coletados corretamente — confirmado através do dashboard Grafana (Fase 13), que consome os dados diretamente do datasource Zabbix: uptime, CPU, memória, disco, rede, disponibilidade HTTP (`net.tcp.service[http,,80]`), disponibilidade SSH e ausência de problemas ativos.
 
 ### Checkpoint
-✅ ICMP (uptime), CPU, memória, disco e rede confirmados com dados reais. ✅ Nenhum problema ativo no momento.
+✅ ICMP (uptime), CPU, memória, disco, rede, HTTP e SSH confirmados com dados reais. ✅ Nenhum problema ativo no momento.
 
 ---
 
@@ -329,17 +346,19 @@ LISTEN *:3000 (grafana)
 Plugins de datasource carregados incluem Zabbix (`alexanderzobnin-zabbix-app`), PostgreSQL, MySQL, InfluxDB, Loki, Prometheus, entre outros.
 
 ### Checkpoint
-✅ Grafana ativo na porta 3000, com dashboard funcional exibido na Fase 13 (evidência de acesso e uso reais).
+✅ Grafana ativo na porta 3000, com dashboard funcional exibido abaixo (evidência de acesso e uso reais — mesma imagem da Fase 13).
+
+![Dashboard NOC no Grafana](images/fase13-dashboard.png)
 
 ---
 
 ## Fase 11 — API Zabbix
- 
+
 ### Execução real
 Foi criado no Zabbix o usuário `grafana_ro` (Name: "Grafana Connector"), destinado à integração com o Grafana.
- 
+
 ![Usuário grafana_ro no Zabbix](images/fase11-api-zabbix.png)
- 
+
 | Campo | Valor |
 |---|---|
 | Username | `grafana_ro` |
@@ -349,7 +368,21 @@ Foi criado no Zabbix o usuário `grafana_ro` (Name: "Grafana Connector"), destin
 | Frontend access | Internal |
 | API access | Enabled |
 | Status | Enabled |
- 
+
+### ⚠️ Achado de segurança
+O usuário `grafana_ro` foi criado com a role **Super admin**, e não com permissão restrita de leitura (Read-only) como recomendado para integrações externas. Super Admin é o nível de privilégio mais alto do Zabbix, com acesso total à configuração do sistema — não apenas leitura de dados. Isso viola o princípio de menor privilégio: se o token de API desse usuário for exposto, quem o obtiver terá controle administrativo completo sobre o Zabbix, não apenas visualização de métricas.
+
+Essa condição foi identificada e mantida como está, por decisão do autor do laboratório — documentada aqui como risco conhecido, na mesma linha do achado de firewall da Fase 14.
+
+### Checkpoint
+⚠️ Usuário e API Token criados e funcionais para a integração — porém com permissão **Super Admin**, não Read-only. Risco de segurança identificado e documentado, não corrigido nesta versão do laboratório.
+
+### Evidências
+O print acima mostra o usuário `grafana_ro` cadastrado no Zabbix, com a role "Super admin role" visível na coluna "User role" — evidência direta da permissão elevada além do necessário para a função de integração com o Grafana. O valor do token de API não foi exposto na imagem, por segurança.
+
+### Recomendação (melhoria futura)
+Criar uma **User role** customizada com permissão Read-only, restrita apenas ao(s) host group(s) necessário(s), e migrar o usuário `grafana_ro` para essa role — eliminando o acesso administrativo desnecessário mantendo a integração com o Grafana funcional.
+
 ---
 
 ## Fase 12 — Integração Grafana + Zabbix
@@ -369,18 +402,20 @@ Dashboard NOC criado no Grafana, com período de visualização "Last 6 hours", 
 
 | Painel | Conteúdo observado |
 |---|---|
-| **Uptime** | 4 dias, 22h36min — host monitorado estável, sem reinicializações recentes |
-| **Memory Usage (%)** | 12.9% de uso de memória |
-| **Storage Usage** | Disponível: 39.0 GiB / Usado: 7.41 GiB |
+| **Uptime** | 4 dias, 23h32min — host monitorado estável, sem reinicializações recentes |
+| **Memory Usage (%)** | 16.0% de uso de memória |
 | **CPU Usage (%)** | 0.03% — carga muito baixa, condizente com ambiente de laboratório ocioso |
+| **Storage Usage** | Usado: 7.41 GiB / Disponível: 39.0 GiB |
+| **HTTP Status** | **Online** — item `net.tcp.service[http,,80]` confirmando a porta 80 do Apache ativa |
+| **SSH Status** | **Online** — disponibilidade da porta 22 confirmada |
 | **Disk I/O Latency** | Gráfico de leitura/escrita ao longo do tempo — pico pontual visível próximo às 19:40 |
-| **Network Traffic** | Download/Upload em kb/s — pico de tráfego correspondente ao mesmo horário do pico de I/O (~19:40), sugerindo alguma atividade concentrada nesse período |
+| **Network Traffic** | Download/Upload em kb/s — pico de tráfego correspondente ao mesmo horário do pico de I/O (~19:40) |
 | **Incidentes** | Tabela com colunas Host / Severity / Status / Problem / Tags / Time — status atual: **"No problems found"** |
 
 ### Checkpoint
-✅ Painéis de disponibilidade (uptime), CPU, memória, disco, rede e problemas ativos presentes e com dados reais. Métricas com unidades corretas (%, GiB, kb/s) e período de tempo coerente (últimas 6 horas).
+✅ Painéis de disponibilidade (uptime, HTTP, SSH), CPU, memória, disco, rede e problemas ativos presentes e com dados reais. Métricas com unidades corretas (%, GiB, kb/s) e período de tempo coerente (últimas 6 horas). Dashboard completo, cobrindo tanto recursos do sistema quanto disponibilidade de serviço — incluindo o item HTTP criado especificamente para fechar a lacuna identificada anteriormente.
 
-> Observação: não há um painel dedicado exclusivamente à disponibilidade HTTP do Apache — os painéis atuais cobrem recursos do sistema (CPU/memória/disco/rede) e uptime geral, mas não o status do serviço web isoladamente. Pode ser um ponto de melhoria futura, já que a Fase 09 monitora esse item no Zabbix.
+![Dashboard NOC no Grafana](images/fase13-dashboard.png)
 
 ---
 
@@ -486,13 +521,23 @@ As cinco etapas exigidas pelo checkpoint (sintoma → evidência → hipótese/c
 
 ## Fase 16 — Evidências e documentação final
 
-🔲 **PENDENTE** — só pode ser fechada depois da Fase 11 (última pendência de print).
+### Execução real
+Todas as fases do laboratório foram documentadas com evidências reais — saídas de terminal coletadas diretamente das três VMs, capturas de pacotes analisadas via `tshark` e complementadas com prints do Wireshark (feitos no PC local), e prints das interfaces do Zabbix e Grafana onde não havia equivalente em linha de comando. Dois achados de segurança foram identificados ao longo do processo e documentados como riscos conhecidos, sem correção nesta versão do laboratório: firewall inativo nas três VMs (Fase 14) e permissão excessiva (Super Admin) no usuário de integração `grafana_ro` (Fase 11).
+
+### Checkpoint
+✅ README completo, organizado e sem credenciais expostas — nenhum valor de API token, senha ou segredo foi publicado em nenhuma fase.
 
 ---
 
 ## Conclusão
 
-*(a redigir quando a Fase 11 for concluída — o aprendizado central já observado no laboratório: um host pode responder ICMP e mesmo assim falhar em SSH, HTTP ou coleta do agente, como ficou evidente entre as Fases 05 e 15.)*
+O laboratório permitiu acompanhar o caminho completo de uma operação NOC: planejamento e endereçamento de rede, validação de conectividade, diagnóstico de protocolos via captura de pacotes (tanto em modo texto via `tshark`, quanto graficamente via Wireshark), implantação de monitoramento com Zabbix, construção de um dashboard operacional no Grafana e investigação de um incidente controlado.
+
+O aprendizado central ficou evidente entre as Fases 05 e 15: um host pode responder ICMP perfeitamente e, ainda assim, apresentar falha total de um serviço específico — no caso, o Apache, que precisou ser instalado do zero durante o laboratório e depois foi usado como base para a simulação de incidente (parar → detectar via ICMP-OK/HTTP-falha → diagnosticar via log → corrigir → validar).
+
+Dois achados de segurança reais também surgiram naturalmente do processo, sem serem provocados de propósito: a ausência de firewall ativo nas três VMs (Fase 14) e o uso de uma permissão de Super Admin, em vez de Read-only, no usuário de integração do Grafana (Fase 11). Ambos foram registrados como riscos conhecidos e documentados com recomendações de correção, refletindo a prática real de um ambiente de operação — nem tudo é resolvido no mesmo ciclo em que é encontrado, mas tudo deve ser visível.
+
+Como melhoria futura, o ambiente pode receber: HTTPS no frontend do Zabbix e no Grafana, ativação do firewall (`ufw`) com regras restritivas por sub-rede, migração do usuário `grafana_ro` para uma role de permissão mínima, resolução de nomes interna (DNS ou `/etc/hosts` compartilhado), retenção de métricas ajustada, backups das configurações, e integração com um projeto SOC/SIEM separado.
 
 ## Checklist final
 
@@ -500,12 +545,12 @@ As cinco etapas exigidas pelo checkpoint (sintoma → evidência → hipótese/c
 - [x] Três VMs instaladas e validadas.
 - [x] IP, gateway, DNS e horário corretos.
 - [x] SSH e HTTP funcionando.
-- [x] Capturas de ICMP, ARP, DNS, TCP (TLS parcial — evidência de aplicação).
+- [x] Capturas de ICMP, ARP, DNS, TCP e TLS (via tshark nas VMs e Wireshark no PC local).
 - [x] Zabbix Server e Agent funcionando.
 - [x] ICMP, HTTP, CPU, memória, disco e rede monitorados.
 - [x] Grafana integrado ao Zabbix.
 - [x] Dashboard NOC criado.
-- [x] Regras de segurança revisadas — firewall inativo identificado e documentado como risco (Fase 14).
+- [x] Regras de segurança revisadas — firewall inativo (Fase 14) e permissão excessiva no usuário de integração (Fase 11) identificados e documentados como riscos.
 - [x] Incidente controlado investigado e corrigido (Fase 15).
 - [x] Nenhuma credencial real publicada.
 
@@ -514,6 +559,12 @@ As cinco etapas exigidas pelo checkpoint (sintoma → evidência → hipótese/c
 ```text
 projeto-noc-thiago/
 ├── README.md
-└── imagens/
-    └── fase11-api-zabbix.png
+└── images/
+    ├── fase06-arp.png
+    ├── fase06-icmp.png
+    ├── fase06-dns.png
+    ├── fase06-tcp-handshake.png
+    ├── fase06-tls.png
+    ├── fase11-api-zabbix.png
+    └── fase13-dashboard.png
 ```
