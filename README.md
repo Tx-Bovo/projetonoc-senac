@@ -1,5 +1,8 @@
 # Projeto Operação NOC — Thiago Bovo Costa
 
+![Dashboard NOC no Grafana](images/fase13-dashboard.png)
+
+
 > **Investigação, Monitoramento e Observabilidade de Redes**
 > Ubuntu Server + Redes + Wireshark + Zabbix + Grafana
 
@@ -331,17 +334,22 @@ Plugins de datasource carregados incluem Zabbix (`alexanderzobnin-zabbix-app`), 
 ---
 
 ## Fase 11 — API Zabbix
-
-### Checkpoint
-🔲 **PENDENTE.**
-
-### O que fazer e capturar
-1. No frontend Zabbix, criar um usuário `grafana_ro` com permissão **somente leitura (Read)** no(s) host group(s) relevante(s).
-2. Gerar um **API token** dedicado para esse usuário (**Users → API tokens**).
-3. Print da tela mostrando o usuário criado e a permissão Read — **nunca** printe ou publique o valor do token, apenas confirme que ele foi gerado (pode aparecer mascarado/cortado no print).
-
-Salvar como `imagens/fase11-api-zabbix.png`. Essa é a única fase que depende de print de tela — todas as outras já foram fechadas com evidência de terminal ou com o dashboard do Grafana.
-
+ 
+### Execução real
+Foi criado no Zabbix o usuário `grafana_ro` (Name: "Grafana Connector"), destinado à integração com o Grafana.
+ 
+![Usuário grafana_ro no Zabbix](imagens/fase11-api-zabbix.png)
+ 
+| Campo | Valor |
+|---|---|
+| Username | `grafana_ro` |
+| Name | Grafana Connector |
+| User role | **Super admin role** |
+| Groups | Internal, Zabbix administrators |
+| Frontend access | Internal |
+| API access | Enabled |
+| Status | Enabled |
+ 
 ---
 
 ## Fase 12 — Integração Grafana + Zabbix
